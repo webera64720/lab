@@ -1,0 +1,149 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: phpipam
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: phpipam
+  name: phpipam
+  namespace: phpipam
+spec:
+  selector:
+    matchLabels:
+      app: phpipam
+      release: phpipam
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: phpipam
+        release: phpipam
+    spec:
+      containers:
+      - env:
+        - name: TZ
+          value: Europe/Berlin
+        - name: IPAM_DATABASE_HOST
+          value: phpipam-db
+        - name: IPAM_DATABASE_WEBHOST
+          value: '%'
+        - name: IPAM_DATABASE_PASS
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: mysql-password
+        image: phpipam/phpipam-www:1.5x
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: phpipam-web
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 30
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      - env:
+        - name: MARIADB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: mysql-password
+        image: mariadb:10.7.3
+        imagePullPolicy: IfNotPresent
+        name: phpipam-mariadb
+        ports:
+        - containerPort: 3306
+          name: mysql
+          protocol: TCP
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: phpipam
+      - env:
+        - name: IPAM_DATABASE_HOST
+          value: phpipam-db
+        - name: IPAM_DATABASE_PASS
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: mysql-password
+        - name: SCAN_INTERVAL
+          value: 1h
+        - name: TZ
+          value: Europe/Berlin
+        image: phpipam/phpipam-cron:1.5x
+        imagePullPolicy: IfNotPresent
+        name: phpipam-cron
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      volumes:
+      - name: phpipam
+        persistentVolumeClaim:
+          claimName: phpipam
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: phpipam
+  namespace: phpipam
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: phpipam
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 500Gi
+  accessModes:
+  - ReadWriteOnce
+  hostPath:
+    path: /nfsdata/phpipam
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: phpipam
+  name: phpipam
+  namespace: phpipam
+spec:
+  ports:
+  - nodePort: 30007
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: phpipam
+  type: NodePort
