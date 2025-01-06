@@ -1,0 +1,20 @@
+phpipamWeb:
+  env:
+    - name: TZ
+      value: Europe/Berlin
+
+phpipamCron:
+  env:
+    - name: TZ
+      value: Europe/Berlin
+  volumes:
+    - name: phpipam
+      persistentVolumeClaim:
+        claimName: phpipam
+phpipamMariadb:
+  persistentVolume:
+    enabled: true
+    accessModes: 
+      - ReadWriteOnce
+    storageClassName: manual
+    size: 500Mi
